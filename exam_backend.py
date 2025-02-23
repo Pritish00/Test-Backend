@@ -25,7 +25,13 @@ UPI_ID = os.getenv("UPI_ID")
 def get_db_connection():
     # Get the connection string from the environment
     conn = pyodbc.connect(
-        os.getenv("DB_CONNECTION_STRING")
+        f"DRIVER={os.getenv('DB_DRIVER')};"
+        f"SERVER={os.getenv('DB_SERVER')};"
+        f"DATABASE={os.getenv('DB_NAME')};"
+        f"UID={os.getenv('DB_USER')};"
+        f"PWD={os.getenv('DB_PASSWORD')};"
+        f"Encrypt={os.getenv('DB_ENCRYPT')};"
+        f"TrustServerCertificate={os.getenv('DB_TRUST_CERT')};"
     )
     return conn
 
