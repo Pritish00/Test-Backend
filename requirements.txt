@@ -1,0 +1,8 @@
+Flask
+flask-cors
+flask-jwt-extended
+pyodbc
+bcrypt
+requests
+python-dotenv
+reportlab
