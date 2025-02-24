@@ -1,7 +1,7 @@
 Flask
 flask-cors
 flask-jwt-extended
-pyodbc
+psycopg2
 bcrypt
 requests
 python-dotenv
