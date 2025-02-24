@@ -146,7 +146,7 @@ def login_user():
     if user:
         # Compare the hashed password with the stored hash
         if bcrypt.checkpw(password.encode('utf-8'), user[1].encode('utf-8')):
-            access_token = create_access_token(identity=user[0], expires_delta=timedelta(minutes=15))
+            access_token = create_access_token(identity=str(user[0]), expires_delta=timedelta(minutes=15))
             return jsonify({
                 "message": "Login successful!",
                 "access_token": access_token,
