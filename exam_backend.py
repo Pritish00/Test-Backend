@@ -611,14 +611,23 @@ def update_tests():
 
 
 @app.route('/my_tests', methods=['GET'])
-# @jwt_required()
 def my_tests():
     """Retrieve the list of tests created by the logged-in user."""
 
     auth_header = request.headers.get("Authorization")  # ✅ Debugging log
     print(f"Authorization Header: {auth_header}")
 
-    creator_id = get_jwt_identity()  # Extract user ID from JWT token
+    creator_id = None
+
+    # Try extracting user ID only if token is present
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            verify_jwt_in_request()  # Manually verify JWT
+            creator_id = get_jwt_identity()  # Get user ID
+        except Exception as e:
+            print(f"JWT Error: {str(e)}")  # ✅ Debug log for JWT issues
+            return jsonify({"message": "Invalid or missing token."}), 401
+
     print(f"Authenticated user ID: {creator_id}")  # ✅ Debugging log
 
     if not creator_id:
@@ -644,6 +653,7 @@ def my_tests():
     conn.close()
 
     return jsonify({"tests": test_list, "tests_left": tests_left_value})
+
 
 
 @app.route('/get_upi_id', methods=['GET'])
