@@ -610,6 +610,26 @@ def update_tests():
         return jsonify({"message": "Error updating tests", "error": str(e)}), 500
 
 
+from flask_jwt_extended.exceptions import NoAuthorizationError
+from werkzeug.exceptions import Unauthorized
+from jwt.exceptions import ExpiredSignatureError  # ✅ Import from PyJWT
+
+@app.errorhandler(NoAuthorizationError)
+def handle_missing_token(error):
+    print("🚨 JWT ERROR: No token found in request")
+    return jsonify({"message": "Missing authentication token"}), 401
+
+@app.errorhandler(ExpiredSignatureError)
+def handle_expired_token(error):
+    print("🚨 JWT ERROR: Token has expired")
+    return jsonify({"message": "Token expired. Please log in again."}), 401
+
+@app.errorhandler(Unauthorized)
+def handle_invalid_token(error):
+    print("🚨 JWT ERROR: Invalid token or unauthorized access")
+    return jsonify({"message": "Invalid token or unauthorized request"}), 401
+
+
 @app.route('/my_tests', methods=['GET'])
 def my_tests():
     """Retrieve the list of tests created by the logged-in user."""
