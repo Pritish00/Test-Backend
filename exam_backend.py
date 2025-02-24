@@ -610,38 +610,45 @@ def update_tests():
         return jsonify({"message": "Error updating tests", "error": str(e)}), 500
 
 
+python
+Copy
+Edit
+
+
 @app.route('/my_tests', methods=['GET'])
 @jwt_required()
 def my_tests():
     """Retrieve the list of tests created by the logged-in user."""
-    creator_id = get_jwt_identity()  # Get user ID from JWT token
+
+    auth_header = request.headers.get("Authorization")  # ✅ Debugging log
+    print(f"Authorization Header: {auth_header}")
+
+    creator_id = get_jwt_identity()  # Extract user ID from JWT token
+    print(f"Authenticated user ID: {creator_id}")  # ✅ Debugging log
+
+    if not creator_id:
+        return jsonify({"message": "Unauthorized"}), 401
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Fetch tests_left
     cursor.execute("SELECT tests_left FROM Users WHERE user_id = %s", (creator_id,))
     tests_left = cursor.fetchone()
-    tests_left_value = tests_left[0] if tests_left else 0  # Extract integer value or default to 0
+    tests_left_value = tests_left[0] if tests_left else 0
 
-    # Fetch tests created by the user
     cursor.execute("""
         SELECT timestamp, test_id, test_taker_name, subject, score, status, pin, num_questions 
-        FROM Tests 
-        WHERE creator_id = %s
+        FROM Tests WHERE creator_id = %s
     """, (creator_id,))
     tests = cursor.fetchall()
 
-    # Convert test records to a list of dictionaries
-    column_names = [desc[0] for desc in cursor.description]  # Extract column names
-    test_list = [dict(zip(column_names, row)) for row in tests]  # Convert to structured data
+    column_names = [desc[0] for desc in cursor.description]
+    test_list = [dict(zip(column_names, row)) for row in tests]
 
     cursor.close()
     conn.close()
 
-    return jsonify({
-        "tests": test_list,
-        "tests_left": tests_left_value
-    })
+    return jsonify({"tests": test_list, "tests_left": tests_left_value})
 
 
 @app.route('/get_upi_id', methods=['GET'])
