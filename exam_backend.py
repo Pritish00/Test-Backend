@@ -40,7 +40,7 @@ def get_db_connection():
     return conn
 
 
-app.config["JWT_SECRET_KEY"] = "your_secret_key"  # Change this to a strong secret key
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "fallback_secret")  # ✅ Use .env variable
 jwt = JWTManager(app)
 
 
