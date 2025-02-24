@@ -15,7 +15,6 @@ import re
 from dotenv import load_dotenv
 import requests
 import json
-import pyodbc
 from datetime import datetime, timedelta
 
 import bcrypt
