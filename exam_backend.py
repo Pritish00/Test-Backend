@@ -610,11 +610,6 @@ def update_tests():
         return jsonify({"message": "Error updating tests", "error": str(e)}), 500
 
 
-python
-Copy
-Edit
-
-
 @app.route('/my_tests', methods=['GET'])
 @jwt_required()
 def my_tests():
