@@ -611,7 +611,7 @@ def update_tests():
 
 
 @app.route('/my_tests', methods=['GET'])
-@jwt_required()
+# @jwt_required()
 def my_tests():
     """Retrieve the list of tests created by the logged-in user."""
 
