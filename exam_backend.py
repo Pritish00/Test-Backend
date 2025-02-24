@@ -1,7 +1,7 @@
 import uuid
 from flask import Flask, request
 from flask_cors import CORS
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, verify_jwt_in_request
 from flask_jwt_extended import JWTManager
 import random
 from flask import send_file, jsonify
@@ -617,18 +617,19 @@ def my_tests():
     auth_header = request.headers.get("Authorization")  # ✅ Debugging log
     print(f"Authorization Header: {auth_header}")
 
-    creator_id = None
+    if not auth_header:
+        return jsonify({"message": "Missing Authorization Header"}), 401
 
-    # Try extracting user ID only if token is present
-    if auth_header and auth_header.startswith("Bearer "):
-        try:
-            verify_jwt_in_request()  # Manually verify JWT
-            creator_id = get_jwt_identity()  # Get user ID
-        except Exception as e:
-            print(f"JWT Error: {str(e)}")  # ✅ Debug log for JWT issues
-            return jsonify({"message": "Invalid or missing token."}), 401
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"message": "Invalid Authorization Header Format"}), 401
 
-    print(f"Authenticated user ID: {creator_id}")  # ✅ Debugging log
+    try:
+        verify_jwt_in_request()  # Manually verify JWT
+        creator_id = get_jwt_identity()  # Extract user ID from token
+        print(f"Authenticated user ID: {creator_id}")  # ✅ Debugging log
+    except Exception as e:
+        print(f"JWT Error: {str(e)}")  # ✅ Log JWT validation error
+        return jsonify({"message": "Invalid or expired token", "error": str(e)}), 401
 
     if not creator_id:
         return jsonify({"message": "Unauthorized"}), 401
@@ -653,6 +654,7 @@ def my_tests():
     conn.close()
 
     return jsonify({"tests": test_list, "tests_left": tests_left_value})
+
 
 
 
