@@ -120,7 +120,7 @@ def register_user():
     # Insert new user into the database
     cursor.execute("""
         INSERT INTO Users (username, email, password, mobile_number, last_login, active, tests_left)
-        VALUES (%s, %s, %s, %s, NULL, TRUE, 5)
+        VALUES (%s, %s, %s, %s, NULL, TRUE, 0)
     """, (username, email, hashed_password, mobile_number))
 
     conn.commit()
@@ -287,7 +287,7 @@ def create_test():
 @app.route('/finalize_test', methods=['POST'])
 @jwt_required()
 def finalize_test():
-    """Finalize a test by saving it to the database."""
+    """Finalize a test by saving it to the database and updating tests_left."""
     data = request.json
     creator_id = get_jwt_identity()
     test_id = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
@@ -296,25 +296,35 @@ def finalize_test():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    validity_period = data.get("validity_period")
-    if validity_period:
-        validity_period = datetime.strptime(validity_period, "%Y-%m-%dT%H:%M")
 
-    # Generate questions using Gemini AI
-    questions = generate_questions_with_gemini(data['subject'], data['num_questions'])
+    # ✅ Check Initial `tests_left`
+    cursor.execute("SELECT tests_left FROM Users WHERE user_id = %s", (creator_id,))
+    tests_left = cursor.fetchone()
 
+
+
+    if not tests_left or tests_left[0] <= 0:
+
+        cursor.close()
+        conn.close()
+        return jsonify({"message": "Insufficient tests left. Please buy more tests."}), 400
+
+    # ✅ Insert into Tests Table
     cursor.execute("""
         INSERT INTO Tests (test_id, creator_id, subject, num_questions, time_limit, status, test_taker_name, pin, validity_period, timestamp)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (test_id, creator_id, data['subject'], data['num_questions'], data['time_limit'], 'open',
-          data['test_taker_name'], pin, validity_period, datetime.now()))
+          data['test_taker_name'], pin, None, datetime.now()))
 
-    # Insert generated questions into the database
-    for idx, question in enumerate(questions):
-        cursor.execute("""
-            INSERT INTO Questions_Progress (test_id, question_id, question_text, answer_choices, correct_answer, progress_data)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (test_id, idx + 1, question['question'], ','.join(question['options']), question['answer'], 'not_started'))
+    conn.commit()
+
+
+    cursor.execute("""
+        UPDATE Users SET tests_left = tests_left - 1 WHERE user_id = %s AND tests_left > 0 RETURNING tests_left
+    """, (creator_id,))
+
+    updated_tests_left = cursor.fetchone()
+
 
     conn.commit()
     cursor.close()
@@ -324,7 +334,7 @@ def finalize_test():
         "message": "Test finalized successfully!",
         "test_id": test_id,
         "pin": pin,
-        "questions": questions
+        "tests_left": updated_tests_left[0] if updated_tests_left else tests_left[0],
     }), 201
 
 
@@ -635,7 +645,6 @@ def my_tests():
     """Retrieve the list of tests created by the logged-in user."""
 
     auth_header = request.headers.get("Authorization")  # ✅ Debugging log
-    print(f"Authorization Header: {auth_header}")
 
     if not auth_header:
         return jsonify({"message": "Missing Authorization Header"}), 401
@@ -646,7 +655,6 @@ def my_tests():
     try:
         verify_jwt_in_request()  # Manually verify JWT
         creator_id = get_jwt_identity()  # Extract user ID from token
-        print(f"Authenticated user ID: {creator_id}")  # ✅ Debugging log
     except Exception as e:
         print(f"JWT Error: {str(e)}")  # ✅ Log JWT validation error
         return jsonify({"message": "Invalid or expired token", "error": str(e)}), 401
