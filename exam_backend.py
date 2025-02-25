@@ -296,57 +296,56 @@ def finalize_test():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    validity_period = data.get("validity_period")
-    if validity_period:
-        validity_period = datetime.strptime(validity_period, "%Y-%m-%dT%H:%M")
+    try:
+        validity_period = data.get("validity_period")
+        if validity_period:
+            validity_period = datetime.strptime(validity_period, "%Y-%m-%dT%H:%M")
 
-    # Generate questions using Gemini AI
-    questions = generate_questions_with_gemini(data['subject'], data['num_questions'])
+        # ✅ Step 1: Check Initial `tests_left`
+        cursor.execute("SELECT tests_left FROM Users WHERE user_id = %s FOR UPDATE", (creator_id,))
+        tests_left = cursor.fetchone()
 
-    # ✅ Step 1: Check Initial `tests_left`
-    cursor.execute("SELECT tests_left FROM Users WHERE user_id = %s", (creator_id,))
-    tests_left = cursor.fetchone()
-    print(f"Before Update: Tests Left = {tests_left[0]}")  # ✅ Debug log
+        if not tests_left or tests_left[0] <= 0:
+            return jsonify({"message": "Insufficient tests left. Please buy more tests."}), 400
 
-    if not tests_left or tests_left[0] <= 0:
+        # ✅ Step 2: Insert into Tests Table
+        cursor.execute("""
+            INSERT INTO Tests (test_id, creator_id, subject, num_questions, time_limit, status, test_taker_name, pin, validity_period, timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (test_id, creator_id, data['subject'], data['num_questions'], data['time_limit'], 'open',
+              data['test_taker_name'], pin, validity_period, datetime.now()))
+
+        # ✅ Step 3: Insert Questions (Rollback if error occurs)
+        questions = generate_questions_with_gemini(data['subject'], data['num_questions'])
+        for idx, question in enumerate(questions):
+            cursor.execute("""
+                INSERT INTO Questions_Progress (test_id, question_id, question_text, answer_choices, correct_answer, progress_data)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (test_id, idx + 1, question['question'][:255], ','.join(question['options'])[:255], question['answer'][:255], 'not_started'))
+
+        # ✅ Step 4: Deduct `tests_left`
+        cursor.execute("""
+            UPDATE Users SET tests_left = tests_left - 1 WHERE user_id = %s AND tests_left > 0 RETURNING tests_left
+        """, (creator_id,))
+        updated_tests_left = cursor.fetchone()
+
+        conn.commit()  # ✅ Commit everything if no error occurs
+        return jsonify({
+            "message": "Test finalized successfully!",
+            "test_id": test_id,
+            "pin": pin,
+            "tests_left": updated_tests_left[0] if updated_tests_left else tests_left[0],
+            "questions": questions
+        }), 201
+
+    except Exception as e:
+        conn.rollback()  # ❌ Rollback all changes if anything fails
+        return jsonify({"message": "Error finalizing test", "error": str(e)}), 500
+
+    finally:
         cursor.close()
         conn.close()
-        return jsonify({"message": "Insufficient tests left. Please buy more tests."}), 400
 
-    # ✅ Step 2: Insert into Tests Table
-    cursor.execute("""
-        INSERT INTO Tests (test_id, creator_id, subject, num_questions, time_limit, status, test_taker_name, pin, validity_period, timestamp)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """, (test_id, creator_id, data['subject'], data['num_questions'], data['time_limit'], 'open',
-          data['test_taker_name'], pin, validity_period, datetime.now()))
-
-    conn.commit()  # ✅ Commit the test before inserting questions
-
-    # ✅ Step 3: Insert Questions (question_id starts from 1)
-    for idx, question in enumerate(questions):
-        question_id = idx + 1  # ✅ Always start from 1 for new tests
-        cursor.execute("""
-            INSERT INTO Questions_Progress (test_id, question_id, question_text, answer_choices, correct_answer, progress_data)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (
-        test_id, question_id, question['question'], ','.join(question['options']), question['answer'], 'not_started'))
-
-    cursor.execute("""
-        UPDATE Users SET tests_left = tests_left - 1 WHERE user_id = %s AND tests_left > 0 RETURNING tests_left
-    """, (creator_id,))
-
-    updated_tests_left = cursor.fetchone()
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    return jsonify({
-        "message": "Test finalized successfully!",
-        "test_id": test_id,
-        "pin": pin,
-        "tests_left": updated_tests_left[0] if updated_tests_left else tests_left[0],  # ✅ Ensure a value is returned
-        "questions": questions
-    }), 201
 
 
 def is_test_expired(test_id):
