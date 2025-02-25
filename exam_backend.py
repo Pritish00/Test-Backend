@@ -120,7 +120,7 @@ def register_user():
     # Insert new user into the database
     cursor.execute("""
         INSERT INTO Users (username, email, password, mobile_number, last_login, active, tests_left)
-        VALUES (%s, %s, %s, %s, NULL, TRUE, 0)
+        VALUES (%s, %s, %s, %s, NULL, TRUE, 5)
     """, (username, email, hashed_password, mobile_number))
 
     conn.commit()
@@ -296,36 +296,46 @@ def finalize_test():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    validity_period = data.get("validity_period")
+    if validity_period:
+        validity_period = datetime.strptime(validity_period, "%Y-%m-%dT%H:%M")
 
-    # ✅ Check Initial `tests_left`
+    # Generate questions using Gemini AI
+    questions = generate_questions_with_gemini(data['subject'], data['num_questions'])
+
+    # ✅ Step 1: Check Initial `tests_left`
     cursor.execute("SELECT tests_left FROM Users WHERE user_id = %s", (creator_id,))
     tests_left = cursor.fetchone()
-
-
+    print(f"Before Update: Tests Left = {tests_left[0]}")  # ✅ Debug log
 
     if not tests_left or tests_left[0] <= 0:
-
         cursor.close()
         conn.close()
         return jsonify({"message": "Insufficient tests left. Please buy more tests."}), 400
 
-    # ✅ Insert into Tests Table
+    # ✅ Step 2: Insert into Tests Table
     cursor.execute("""
         INSERT INTO Tests (test_id, creator_id, subject, num_questions, time_limit, status, test_taker_name, pin, validity_period, timestamp)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (test_id, creator_id, data['subject'], data['num_questions'], data['time_limit'], 'open',
-          data['test_taker_name'], pin, None, datetime.now()))
+          data['test_taker_name'], pin, validity_period, datetime.now()))
 
-    conn.commit()
+    conn.commit()  # ✅ Commit the test before inserting questions
 
+    # ✅ Step 3: Insert Questions (question_id starts from 1)
+    for idx, question in enumerate(questions):
+        question_id = idx + 1  # ✅ Always start from 1 for new tests
+        cursor.execute("""
+            INSERT INTO Questions_Progress (test_id, question_id, question_text, answer_choices, correct_answer, progress_data)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (
+        test_id, question_id, question['question'], ','.join(question['options']), question['answer'], 'not_started'))
 
     cursor.execute("""
         UPDATE Users SET tests_left = tests_left - 1 WHERE user_id = %s AND tests_left > 0 RETURNING tests_left
     """, (creator_id,))
 
     updated_tests_left = cursor.fetchone()
-
-
     conn.commit()
     cursor.close()
     conn.close()
@@ -334,7 +344,8 @@ def finalize_test():
         "message": "Test finalized successfully!",
         "test_id": test_id,
         "pin": pin,
-        "tests_left": updated_tests_left[0] if updated_tests_left else tests_left[0],
+        "tests_left": updated_tests_left[0] if updated_tests_left else tests_left[0],  # ✅ Ensure a value is returned
+        "questions": questions
     }), 201
 
 
@@ -645,6 +656,7 @@ def my_tests():
     """Retrieve the list of tests created by the logged-in user."""
 
     auth_header = request.headers.get("Authorization")  # ✅ Debugging log
+    print(f"Authorization Header: {auth_header}")
 
     if not auth_header:
         return jsonify({"message": "Missing Authorization Header"}), 401
