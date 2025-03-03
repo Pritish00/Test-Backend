@@ -129,6 +129,43 @@ def register_user():
 
     return jsonify({"message": "User registered successfully!"}), 201
 
+@app.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    data = request.json
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    WHATSAPP_API_KEY = os.getenv("WHATSAPP_API_KEY")
+    WHATSAPP_FROM_NUMBER = os.getenv("WHATSAPP_FROM_NUMBER")
+    identifier = data.get("identifier")  # Can be email or phone number
+
+    if not identifier:
+        return jsonify({"message": "Email or phone number is required."}), 400
+
+    # Fetch user details from MSSQL (search by email OR phone number)
+    cursor.execute("SELECT phone_number, email, password FROM Users WHERE email = ? OR phone_number = ?", (identifier, identifier))
+    user = cursor.fetchone()
+
+    if not user:
+        return jsonify({"message": "User not found."}), 404
+
+    phone_number, email, password = user
+
+    # Send WhatsApp message
+    whatsapp_message = f"Your login details:\nEmail: {email}\nPassword: {password}"
+    whatsapp_api_url = f"https://your-whatsapp-api.com/send?api_key={WHATSAPP_API_KEY}"
+
+    payload = {
+        "to": phone_number,
+        "from": WHATSAPP_FROM_NUMBER,
+        "message": whatsapp_message
+    }
+
+    whatsapp_response = requests.post(whatsapp_api_url, json=payload)
+
+    if whatsapp_response.status_code == 200:
+        return jsonify({"message": "Login details sent via WhatsApp."}), 200
+    else:
+        return jsonify({"message": "Failed to send WhatsApp message."}), 500
 
 @app.route('/login', methods=['POST'])
 def login_user():
@@ -146,7 +183,7 @@ def login_user():
     if user:
         # Compare the hashed password with the stored hash
         if bcrypt.checkpw(password.encode('utf-8'), user[1].encode('utf-8')):
-            access_token = create_access_token(identity=str(user[0]), expires_delta=timedelta(minutes=2))
+            access_token = create_access_token(identity=str(user[0]), expires_delta=timedelta(minutes=30))
             return jsonify({
                 "message": "Login successful!",
                 "access_token": access_token,
