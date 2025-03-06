@@ -358,7 +358,7 @@ def finalize_test():
             cursor.execute("""
                 INSERT INTO Questions_Progress (test_id, question_id, question_text, answer_choices, correct_answer, progress_data)
                 VALUES (%s, %s, %s, %s, %s, %s)
-            """, (test_id, idx + 1, question['question'][:255], ','.join(question['options'])[:255], question['answer'][:255], 'not_started'))
+            """, (test_id, idx + 1, question['question'][:255], json.dumps(question['options']), question['answer'][:255], 'not_started'))
 
         # ✅ Step 4: Deduct `tests_left`
         cursor.execute("""
@@ -620,7 +620,7 @@ def get_test_questions():
         {
             "id": row[0],
             "text": row[1],
-            "options": row[2].split(','),  # Convert stored string to list
+            "options": json.loads(row[2]),  # Convert stored string to list
             "answer": row[3]
         }
         for row in questions
