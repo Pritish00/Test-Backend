@@ -2,6 +2,7 @@ Flask
 flask-cors
 flask-jwt-extended
 psycopg2
+razorpay
 bcrypt
 requests
 python-dotenv
