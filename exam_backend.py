@@ -13,6 +13,8 @@ import os
 import string
 import re
 from dotenv import load_dotenv
+import razorpay
+from flask import request, jsonify
 import requests
 import json
 from datetime import datetime, timedelta
@@ -23,6 +25,11 @@ app = Flask(__name__)
 CORS(app)
 
 load_dotenv()
+razorpay_key = os.getenv("RAZORPAY_KEY")
+razorpay_secret = os.getenv("RAZORPAY_SECRET")
+
+# Initialize Razorpay client
+razorpay_client = razorpay.Client(auth=(razorpay_key, razorpay_secret))
 
 UPI_ID = os.getenv("UPI_ID")
 import psycopg2
@@ -44,6 +51,55 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "fallback_secret")  #
 jwt = JWTManager(app)
 
 
+@app.route("/create_order", methods=["POST"])
+def create_order():
+    data = request.json
+    amount = data["amount"]
+    user_id = data["user_id"]
+
+    order_data = razorpay_client.order.create(
+        {"amount": amount, "currency": "INR", "payment_capture": 1}
+    )
+
+    return jsonify({"order_id": order_data["id"], "amount": amount})
+
+@app.route("/verify_payment", methods=["POST"])
+def verify_payment():
+    data = request.json
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    razorpay_order_id = data["order_id"]
+    razorpay_payment_id = data["payment_id"]
+    razorpay_signature = data["signature"]
+    user_id = data["user_id"]
+    num_tests = data["num_tests"]
+
+    # Verify Signature
+    params_dict = {
+        "razorpay_order_id": razorpay_order_id,
+        "razorpay_payment_id": razorpay_payment_id,
+        "razorpay_signature": razorpay_signature,
+    }
+
+    try:
+        razorpay_client.utility.verify_payment_signature(params_dict)
+
+        # Update user's test count in the database
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE Users SET tests_left = tests_left + %s WHERE user_id = %s",
+            (num_tests, user_id),
+        )
+        conn.commit()
+        return jsonify({"message": "Payment verified and tests updated."})
+    except razorpay.errors.SignatureVerificationError:
+        return jsonify({"error": "Payment verification failed."}), 400
+
+@app.route("/get_razorpay_key", methods=["GET"])
+def get_razorpay_key():
+    if not razorpay_key:
+        return jsonify({"error": "Razorpay key not found"}), 500
+    return jsonify({"key": razorpay_key})
 
 def hash_password(password):
     salt = bcrypt.gensalt()
@@ -120,7 +176,7 @@ def register_user():
     # Insert new user into the database
     cursor.execute("""
         INSERT INTO Users (username, email, password, mobile_number, last_login, active, tests_left)
-        VALUES (%s, %s, %s, %s, NULL, TRUE, 5)
+        VALUES (%s, %s, %s, %s, NULL, TRUE, 2)
     """, (username, email, hashed_password, mobile_number))
 
     conn.commit()
