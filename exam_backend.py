@@ -236,7 +236,7 @@ def login_user():
     cursor = conn.cursor()
 
     # Retrieve the user from the database using email
-    cursor.execute("SELECT user_id, password FROM Users WHERE email = %s", (email,))
+    cursor.execute("SELECT user_id, password,mobile_number FROM Users WHERE email = %s", (email,))
     user = cursor.fetchone()
 
     if user:
@@ -246,7 +246,8 @@ def login_user():
             return jsonify({
                 "message": "Login successful!",
                 "access_token": access_token,
-                "user_id": user[0]
+                "user_id": user[0],
+                "mobile_number": user[2]
             }), 200
         else:
             return jsonify({"message": "Invalid email or password."}), 400
