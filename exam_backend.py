@@ -226,6 +226,52 @@ def forgot_password():
     else:
         return jsonify({"message": "Failed to send WhatsApp message."}), 500
 
+import requests
+from flask import Flask, request, jsonify
+from database import get_db_connection  # Your DB connection function
+
+app = Flask(__name__)
+
+WHATSAPP_API_KEY = "YOUR_WHATSAPP_API_KEY"
+FROM_MOBILE_NUMBER = "YOUR_WHATSAPP_REGISTERED_NUMBER"
+
+@app.route("/forgot_password", methods=["POST"])
+def forgot_password():
+    data = request.json
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT password, mobile_number FROM Users WHERE email = %s", (email,))
+    user = cursor.fetchone()
+
+    if not user:
+        return jsonify({"error": "No account found with this email"}), 404
+
+    password, mobile_number = user
+
+    # Send password via WhatsApp API
+    whatsapp_url = "https://api.whatsapp.com/send"
+    message = f"Your password for Test IQ is: {password}"
+    payload = {
+        "to": mobile_number,
+        "message": message,
+        "apikey": WHATSAPP_API_KEY,
+        "from": FROM_MOBILE_NUMBER
+    }
+
+    response = requests.post(whatsapp_url, json=payload)
+
+    if response.status_code == 200:
+        return jsonify({"message": "Password sent via WhatsApp."})
+    else:
+        return jsonify({"error": "Failed to send password via WhatsApp."}), 500
+
+
 @app.route('/login', methods=['POST'])
 def login_user():
     data = request.json
