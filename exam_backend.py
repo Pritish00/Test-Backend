@@ -192,16 +192,23 @@ def register_user():
 @app.route("/reset_password", methods=["POST"])
 def reset_password():
     data = request.json
+    conn = get_db_connection()
+    cursor = conn.cursor()
     email = data.get("email")
     new_password = data.get("new_password")
 
     if not email or not new_password:
         return jsonify({"error": "Missing email or new password"}), 400
 
+    cursor.execute("SELECT user_id FROM Users WHERE email = %s", (email,))
+    user = cursor.fetchone()
+
+    if not user:
+        return jsonify({"error": "Email not found. Please enter a registered email."}), 404
+
     hashed_password = hash_password(new_password)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+
 
     cursor.execute(
         "UPDATE Users SET password = %s WHERE email = %s",
