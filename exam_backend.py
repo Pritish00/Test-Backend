@@ -55,24 +55,25 @@ jwt = JWTManager(app)
 def create_order():
     data = request.json
     amount = data["amount"]
-    user_id = data["user_id"]
 
-    order_data = razorpay_client.order.create(
-        {"amount": amount, "currency": "INR", "payment_capture": 1}
+    order = razorpay_client.order.create(
+        {"amount": amount * 100, "currency": "INR", "payment_capture": 1}
     )
 
-    return jsonify({"order_id": order_data["id"], "amount": amount})
+    return jsonify(order)
 
 @app.route("/verify_payment", methods=["POST"])
 def verify_payment():
     data = request.json
     conn = get_db_connection()
-    cursor = conn.cursor()
-    razorpay_order_id = data["order_id"]
-    razorpay_payment_id = data["payment_id"]
-    razorpay_signature = data["signature"]
+    razorpay_order_id = data.get("order_id")
+    razorpay_payment_id = data.get("payment_id")
+    razorpay_signature = data.get("signature")
     user_id = data["user_id"]
     num_tests = data["num_tests"]
+
+    if not razorpay_order_id or not razorpay_payment_id or not razorpay_signature:
+        return jsonify({"error": "Invalid payment details"}), 400
 
     # Verify Signature
     params_dict = {
@@ -85,6 +86,8 @@ def verify_payment():
         razorpay_client.utility.verify_payment_signature(params_dict)
 
         # Update user's test count in the database
+
+
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE Users SET tests_left = tests_left + %s WHERE user_id = %s",
