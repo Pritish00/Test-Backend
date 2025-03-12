@@ -189,44 +189,30 @@ def register_user():
     return jsonify({"message": "User registered successfully!"}), 201
 
 
-WHATSAPP_API_KEY = os.getenv("WHATSAPP_API_KEY")
-FROM_MOBILE_NUMBER = os.getenv("FROM_MOBILE_NUMBER")
-
-@app.route("/forgot_password", methods=["POST"])
-def forgot_password():
+@app.route("/reset_password", methods=["POST"])
+def reset_password():
     data = request.json
     email = data.get("email")
+    new_password = data.get("new_password")
 
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
+    if not email or not new_password:
+        return jsonify({"error": "Missing email or new password"}), 400
+
+    hashed_password = hash_password(new_password)
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT password, mobile_number FROM Users WHERE email = %s", (email,))
-    user = cursor.fetchone()
+    cursor.execute(
+        "UPDATE Users SET password = %s WHERE email = %s",
+        (hashed_password, email),
+    )
 
-    if not user:
-        return jsonify({"error": "No account found with this email"}), 404
+    conn.commit()
+    cursor.close()
+    conn.close()
 
-    password, mobile_number = user
-
-    # Send password via WhatsApp API
-    whatsapp_url = "https://api.whatsapp.com/send"
-    message = f"Your password for Test IQ is: {password}"
-    payload = {
-        "to": mobile_number,
-        "message": message,
-        "apikey": WHATSAPP_API_KEY,
-        "from": FROM_MOBILE_NUMBER
-    }
-
-    response = requests.post(whatsapp_url, json=payload)
-
-    if response.status_code == 200:
-        return jsonify({"message": "Password sent via WhatsApp."})
-    else:
-        return jsonify({"error": "Failed to send password via WhatsApp."}), 500
+    return jsonify({"message": "Password updated successfully!"})
 
 
 @app.route('/login', methods=['POST'])
