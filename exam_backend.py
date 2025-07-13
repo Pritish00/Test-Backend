@@ -179,7 +179,7 @@ def register_user():
     # Insert new user into the database
     cursor.execute("""
         INSERT INTO Users (username, email, password, mobile_number, last_login, active, tests_left)
-        VALUES (%s, %s, %s, %s, NULL, TRUE, 2)
+        VALUES (%s, %s, %s, %s, NULL, TRUE, 10)
     """, (username, email, hashed_password, mobile_number))
 
     conn.commit()
